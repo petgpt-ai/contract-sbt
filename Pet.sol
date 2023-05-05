@@ -55,9 +55,13 @@ contract Pet is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
         if (isLocked) emit Locked(tokenId);
     }
 
-    function setPrice(uint256 _price,uint256 _commission) external onlyOwner {
-        price = _price;
-        commission = _commission;
+    function setPrice(uint price_) public onlyOwner {
+        price = price_;
+    }
+
+    function setCommission(uint commission_) public onlyOwner {
+        require(commission_ <= 100, 'Commission cannot be greater than 100%');
+        commission = commission_;
     }
 
     function withdraw() external onlyOwner {
