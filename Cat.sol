@@ -7,27 +7,29 @@ import "./openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "./openzeppelin/contracts/access/Ownable.sol";
 import "./IERC5192.sol";
 
-interface PetGenesis {
+interface CatScientist {
     function ownerOf(uint256 tokenId) external view returns (address);
 }
 
-contract Pet is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
+contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
 
     bool private isLocked;
-    PetGenesis private petGenesis;
+    CatScientist private catScientist;
 
-    uint256 public price = 0.005 ether;
+    uint256 public price = 0.05 ether;
     uint256 public commission = 30;
+    uint256 public bonus = 20;
+    address public bonusAddress;
 
-    constructor(address petGenesisAddress) ERC721("Pet", "PET") {
-        petGenesis = PetGenesis(petGenesisAddress);
+    string private _baseURIextended;
+
+    constructor(address catScientistAddress) ERC721("Cat", "CAT") {
+        catScientist = CatScientist(catScientistAddress);
         isLocked = true;
     }
 
-    event PayForScientistOwner(address scientistOwner, uint256 amount);
-
     function mint(uint256 scientistId, string memory url) payable external {
-        address scientistOwner = petGenesis.ownerOf(scientistId);
+        address scientistOwner = catScientist.ownerOf(scientistId);
 
         require(scientistOwner != address(0), 'Scientist Id is ineffective');
         uint256 value = msg.value;
@@ -39,12 +41,18 @@ contract Pet is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
             payable(sender).transfer(value - price);
 
         uint256 scientistOwnerCommission = price / 100 * commission;
+
         if (scientistOwnerCommission > 0) {
             payable(scientistOwner).transfer(scientistOwnerCommission);
-            emit PayForScientistOwner(scientistOwner, scientistOwnerCommission);
         }
 
-        uint256 ownerIncome = price - scientistOwnerCommission;
+        uint256 rewardBonus = price / 100 * bonus;
+
+        if (rewardBonus > 0 && bonusAddress != address(0)) {
+            payable(bonusAddress).transfer(rewardBonus);
+        }
+
+        uint256 ownerIncome = price - scientistOwnerCommission - rewardBonus;
         if (ownerIncome > 0)
             payable(owner()).transfer(ownerIncome);
 
@@ -62,6 +70,23 @@ contract Pet is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
     function setCommission(uint commission_) public onlyOwner {
         require(commission_ <= 100, 'Commission cannot be greater than 100%');
         commission = commission_;
+    }
+
+    function setBonus(uint bonus_) public onlyOwner {
+        require(bonus_ <= 100, 'bonus cannot be greater than 100%');
+        bonus = bonus_;
+    }
+
+    function setBonusAddress(address bonusAddress_) public onlyOwner {
+        bonusAddress = bonusAddress_;
+    }
+
+    function setBaseURI(string memory baseURI_) external onlyOwner() {
+        _baseURIextended = baseURI_;
+    }
+
+    function _baseURI() internal view virtual override returns (string memory) {
+        return _baseURIextended;
     }
 
     function withdraw() external onlyOwner {
