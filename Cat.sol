@@ -28,6 +28,10 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
         isLocked = true;
     }
 
+    event PayForScientistOwner(address scientistOwner, uint amount);
+
+    event PayForBonusAddress(address bonusAddress, uint amount);
+
     function mint(uint256 scientistId, string memory url) payable external {
         address scientistOwner = catScientist.ownerOf(scientistId);
 
@@ -44,12 +48,14 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
 
         if (scientistOwnerCommission > 0) {
             payable(scientistOwner).transfer(scientistOwnerCommission);
+            emit PayForScientistOwner(scientistOwner, scientistOwnerCommission);
         }
 
         uint256 rewardBonus = price / 100 * bonus;
 
         if (rewardBonus > 0 && bonusAddress != address(0)) {
             payable(bonusAddress).transfer(rewardBonus);
+            emit PayForBonusAddress(bonusAddress, rewardBonus);
         }
 
         uint256 ownerIncome = price - scientistOwnerCommission - rewardBonus;
