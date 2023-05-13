@@ -125,14 +125,87 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
     /* begin ERC-5192 spec functions */
     /**
      * @inheritdoc IERC5192
-     * @dev All valid tokens are locked: Relics are soul-bound/non-transferrable
+     * @dev All valid tokens are locked: soul-bound/non-transferrable
      */
     function locked(uint256 id) external view returns (bool) {
         return ownerOf(id) != address(0);
     }
 
+    /**
+     * @dev See {IERC721-safeTransferFrom}.
+     * @dev Immediately reverts: soul-bound/non-transferrable
+     */
+    function safeTransferFrom(
+        address,
+        address,
+        uint256,
+        bytes memory
+    ) public virtual override(ERC721,IERC721) {
+        revert("Soul Bound Token");
+    }
+
+    /**
+     * @inheritdoc IERC721
+     * @dev Immediately reverts: soul-bound/non-transferrable
+     */
+    function safeTransferFrom(
+        address, /* from */
+        address, /* to */
+        uint256 /* tokenId */
+    ) public virtual override(ERC721,IERC721)  {
+        revert("Soul Bound Token");
+    }
+
+    /**
+     * @inheritdoc IERC721
+     * @dev Immediately reverts: soul-bound/non-transferrable
+     */
+    function transferFrom(
+        address, /* from */
+        address, /* to */
+        uint256 /* id */
+    )  public virtual override(ERC721,IERC721)  {
+        revert("Soul Bound Token");
+    }
+
+    /**
+     * @inheritdoc IERC721
+     * @dev Immediately reverts: soul-bound/non-transferrable
+     */
+    function approve(
+        address, /* to */
+        uint256 /* tokenId */
+    )  public virtual override(ERC721,IERC721)  {
+        revert("Soul Bound Token");
+    }
+
+    /**
+     * @dev See {IERC721-setApprovalForAll}.
+     * @dev Immediately reverts: soul-bound/non-transferrable
+     */
+    function setApprovalForAll(address, bool) public virtual override(ERC721,IERC721) {
+        revert("Soul Bound Token");
+    }
+
+    /**
+     * @dev See {IERC721-getApproved}. 
+     * Always returns the null address: soul-bound/non-transferrable
+     */
+    function getApproved(uint256) public view virtual override(ERC721,IERC721) returns (address) {
+
+        return address(0);
+    }
+
+    /**
+     * @dev See {IERC721-isApprovedForAll}.
+     * @dev Always returns false: soul-bound/non-transferrable
+     */
+    function isApprovedForAll(address, address) public view virtual override(ERC721,IERC721) returns (bool) {
+        return false;
+    }
+    
     /*
-     * @dev All valid tokens are locked: Relics are soul-bound/non-transferrable
+     * @dev All valid tokens are locked: soul-bound/non-transferrable
      */
     function _beforeTokenTransfer(
         address from,
@@ -144,7 +217,5 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
         require(from == address(0), "Soul Bound Token");
         super._beforeTokenTransfer(from, to, firstTokenId, batchSize);
     }
-
-
 
 }
