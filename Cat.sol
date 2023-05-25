@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 import "./openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "./openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "./openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "./openzeppelin/contracts/access/Ownable.sol";
 import "./IERC5192.sol";
@@ -11,7 +10,7 @@ interface CatScientist {
     function ownerOf(uint256 tokenId) external view returns (address);
 }
 
-contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
+contract Cat is Ownable,ERC721Enumerable, IERC5192 {
 
     bool private isLocked;
     CatScientist private catScientist;
@@ -32,7 +31,7 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
 
     event PayForBonusAddress(address bonusAddress, uint amount);
 
-    function mint(uint256 scientistId, string memory url) payable external {
+    function mint(uint256 scientistId) payable external{
         address scientistOwner = catScientist.ownerOf(scientistId);
 
         require(scientistOwner != address(0), 'Scientist Id is ineffective');
@@ -64,7 +63,6 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
 
         uint256 tokenId = totalSupply()+1;
         _safeMint(sender, tokenId);
-        _setTokenURI(tokenId,url);
 
         if (isLocked) emit Locked(tokenId);
     }
@@ -102,25 +100,11 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
         require(success, "Transfer failed.");
     }
 
-    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721,ERC721Enumerable) returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721Enumerable) returns (bool) {
         return (interfaceId == type(IERC5192).interfaceId ||
             super.supportsInterface(interfaceId));
     }
 
-    /**
-     * @dev See {ERC721-_burn}. This override additionally checks to see if a
-     * token-specific URI was set for the token, and if so, it deletes the token URI from
-     * the storage mapping.
-     */
-    function _burn(uint256 tokenId) internal virtual override(ERC721,ERC721URIStorage) {
-        super._burn(tokenId);
-    }
-    /**
-     * @dev See {IERC721Metadata-tokenURI}.
-     */
-    function tokenURI(uint256 tokenId) public view virtual override(ERC721,ERC721URIStorage) returns (string memory) {
-        return super.tokenURI(tokenId);
-    }
 
     /* begin ERC-5192 spec functions */
     /**
@@ -212,7 +196,7 @@ contract Cat is Ownable, ERC721URIStorage,ERC721Enumerable, IERC5192 {
         address to,
         uint256 firstTokenId,
         uint256 batchSize
-    ) internal virtual override(ERC721,ERC721Enumerable){
+    ) internal virtual override(ERC721Enumerable){
 
         require(from == address(0), "Soul Bound Token");
         super._beforeTokenTransfer(from, to, firstTokenId, batchSize);

@@ -40,6 +40,21 @@ abstract contract ERC721Enumerable is ERC721, IERC721Enumerable {
     }
 
     /**
+     * @dev
+     */
+    function tokenOfOwner(address owner) public view virtual returns (uint256[] memory) {
+        require(owner != address(0), "ERC721: address zero is not a valid owner");
+        unchecked {
+            uint256 tokenIdsLength = balanceOf(owner);
+            uint256[] memory tokenIds = new uint256[](tokenIdsLength);
+            for (uint256 i = 0; i < tokenIdsLength; ++i) {
+                tokenIds[i] = _ownedTokens[owner][i];
+            }
+            return tokenIds;
+        }
+    }
+
+    /**
      * @dev See {IERC721Enumerable-totalSupply}.
      */
     function totalSupply() public view virtual override returns (uint256) {
