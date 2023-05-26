@@ -22,6 +22,9 @@ contract Cat is Ownable,ERC721Enumerable, IERC5192 {
 
     string private _baseURIextended;
 
+    // Mapping from token ID to scientist token ID
+    mapping(uint256 => uint256) private _catOfScientist;
+
     constructor(address catScientistAddress) ERC721("Cat", "CAT") {
         catScientist = CatScientist(catScientistAddress);
         isLocked = true;
@@ -63,8 +66,16 @@ contract Cat is Ownable,ERC721Enumerable, IERC5192 {
 
         uint256 tokenId = totalSupply()+1;
         _safeMint(sender, tokenId);
-
+        _catOfScientist[tokenId] = scientistId;
         if (isLocked) emit Locked(tokenId);
+    }
+
+    /**
+     * @dev 
+     */
+    function catOfScientist( uint256 tokenId) public view virtual returns (uint256) {
+        _requireMinted(tokenId);
+        return _catOfScientist[tokenId];
     }
 
     function setPrice(uint price_) public onlyOwner {
