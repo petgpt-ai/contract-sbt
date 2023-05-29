@@ -2,8 +2,8 @@
 pragma solidity ^0.8.18;
 
 import "./openzeppelin/contracts/access/Ownable.sol";
-contract BallotTest is Ownable {
 
+contract AWARD is  Ownable   {
     uint public cycle;
     uint public awardRankSize;
     uint256 public cycleAwardBlockNumber;
@@ -11,7 +11,8 @@ contract BallotTest is Ownable {
     mapping(uint256 => uint256) public awardMap;
     mapping(uint => uint256) public rankMap;
 
-    constructor() {
+    constructor() {      
+        // __Ownable_init();
         cycle = 0;
         awardRankSize = 5;
         cycleAwardBlockNumber = 0;
@@ -22,6 +23,7 @@ contract BallotTest is Ownable {
         rankMap[4] = 10;
         rankMap[5] = 10;
     }
+
     function setAwardRankSize(uint inAwardRankSize)public onlyOwner{
         require(inAwardRankSize != 0, "award size number not 0");
         awardRankSize = inAwardRankSize;
@@ -38,7 +40,7 @@ contract BallotTest is Ownable {
         require(blockNumber != 0, "award block number not 0");
         cycleAwardBlockNumber = blockNumber;
     }
-    /*加入名次对应百分比 转账给owner */
+
     function award(address[][] calldata userAddrs)public onlyOwner{
         require(userAddrs.length > 0,"user address length is 0");
         require(userAddrs.length == awardRankSize,"awards not award rank size");
@@ -76,22 +78,16 @@ contract BallotTest is Ownable {
                 payable(userAddr).transfer(perAmount);
             }
         }
-        
-        
-        // /* 转手续费到创建者 */
-        // address ownerAddr = owner(); 
-        // payable(ownerAddr).transfer(sumServiceCharge);
         cycle += 1;
     }
 
-    function getContractsBalance()public view onlyOwner returns(uint256){
+    function getContractsBalance()public view virtual returns(uint256){
         address contractsAddress = address(this);
         uint256 balance = contractsAddress.balance;
         return balance;
     }
-    //合约地址可以接受转账
-    receive() external payable{
 
+    receive() external payable{
         require(msg.value >= 0, "receive is 0");
         if(startAwardBlockNumber == 0||cycleAwardBlockNumber ==0){
             awardMap[cycle] += msg.value ;
@@ -101,7 +97,7 @@ contract BallotTest is Ownable {
             awardMap[cycleNum] += msg.value;
         }
     }
-    
+
     fallback() external payable{}
 
     function withdraw() external onlyOwner {
