@@ -19,7 +19,7 @@ contract Cat is Ownable,ERC721Enumerable, IERC5192 {
     uint256 public commission = 30;
     uint256 public bonus = 20;
     address public bonusAddress;
-
+    address public scientistAddress;
     string private _baseURIextended;
 
     // Mapping from token ID to scientist token ID
@@ -27,6 +27,7 @@ contract Cat is Ownable,ERC721Enumerable, IERC5192 {
 
     constructor(address catScientistAddress) ERC721("Cat", "CAT") {
         catScientist = CatScientist(catScientistAddress);
+        scientistAddress = catScientistAddress;
         isLocked = true;
     }
     
@@ -57,7 +58,7 @@ contract Cat is Ownable,ERC721Enumerable, IERC5192 {
 
         if (rewardBonus > 0 && bonusAddress != address(0)) {
             // payable(bonusAddress).transfer(rewardBonus);
-            (bool sent,/*memory data*/) = bonusAddress.call{value: rewardBonus}("");
+            (bool sent,/*memory data*/) = bonusAddress.call{value:rewardBonus}("");
             require(sent,"Failure! Ether not sent");
             emit PayForBonusAddress(bonusAddress, rewardBonus);
         }

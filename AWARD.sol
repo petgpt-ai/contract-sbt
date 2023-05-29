@@ -29,11 +29,9 @@ contract AWARD is  Ownable   {
         awardRankSize = inAwardRankSize;
     }
 
-    function setStartAwardBlockNumber(uint256 blockNumber)public onlyOwner{
-        require(blockNumber != 0, "award block number not 0");
-        // console.log("b:%d b:%d",blockNumber,block.number);
-        require(blockNumber > block.number, "award block <= cur block number");
-        startAwardBlockNumber = blockNumber;
+    function setStartAwardBlockNumber()public onlyOwner{
+        require(block.number != 0, "block number err");
+        startAwardBlockNumber =  block.number;
     }
 
     function setCycleAwardBlockNumber(uint256 blockNumber)public onlyOwner{
@@ -87,12 +85,31 @@ contract AWARD is  Ownable   {
         return balance;
     }
 
+    function getCycleByCalc()public view virtual returns(uint256){
+        uint256 tmpAwardBlockNumber = block.number - startAwardBlockNumber;
+        require(tmpAwardBlockNumber > 0, "block.number error");
+        uint256 cycleNum = tmpAwardBlockNumber / cycleAwardBlockNumber;
+        return cycleNum;
+    }
+
+    /**
+     * some Arbitrum contract:
+     * block.number => returns L1 block number
+     */
+    function getBlockNum()public view virtual returns(uint256){
+        require(block.number != 0, "block number err");
+        return block.number;
+    }
+
     receive() external payable{
         require(msg.value >= 0, "receive is 0");
         if(startAwardBlockNumber == 0||cycleAwardBlockNumber ==0){
             awardMap[cycle] += msg.value ;
         }else{
             uint256 tmpAwardBlockNumber = block.number - startAwardBlockNumber;
+            if(tmpAwardBlockNumber < 0){
+                return;
+            }
             uint256 cycleNum = tmpAwardBlockNumber / cycleAwardBlockNumber;
             awardMap[cycleNum] += msg.value;
         }
