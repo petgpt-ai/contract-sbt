@@ -56,7 +56,9 @@ contract Cat is Ownable,ERC721Enumerable, IERC5192 {
         uint256 rewardBonus = price / 100 * bonus;
 
         if (rewardBonus > 0 && bonusAddress != address(0)) {
-            payable(bonusAddress).transfer(rewardBonus);
+            // payable(bonusAddress).transfer(rewardBonus);
+            (bool sent,/*memory data*/) = bonusAddress.call{value: rewardBonus}("");
+            require(sent,"Failure! Ether not sent");
             emit PayForBonusAddress(bonusAddress, rewardBonus);
         }
 
