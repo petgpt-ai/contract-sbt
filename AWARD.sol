@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.8;
 
+// import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+// import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "./openzeppelin/contracts/access/Ownable.sol";
 
 contract AWARD is  Ownable   {
@@ -23,15 +25,21 @@ contract AWARD is  Ownable   {
         rankMap[4] = 10;
         rankMap[5] = 10;
     }
+    function setCycle(uint inCycle)public onlyOwner{
+        require(inCycle != 0, "cycle number not 0");
+        cycle = inCycle;
+    }
 
     function setAwardRankSize(uint inAwardRankSize)public onlyOwner{
         require(inAwardRankSize != 0, "award size number not 0");
         awardRankSize = inAwardRankSize;
     }
 
-    function setStartAwardBlockNumber()public onlyOwner{
-        require(block.number != 0, "block number err");
-        startAwardBlockNumber =  block.number;
+    function setStartAwardBlockNumber(uint256 blockNumber)public onlyOwner{
+        require(blockNumber != 0, "award block number not 0");
+        // console.log("b:%d b:%d",blockNumber,block.number);
+        // require(blockNumber > block.number, "award block <= cur block number");
+        startAwardBlockNumber = blockNumber;
     }
 
     function setCycleAwardBlockNumber(uint256 blockNumber)public onlyOwner{
@@ -40,14 +48,21 @@ contract AWARD is  Ownable   {
     }
 
     function award(address[][] calldata userAddrs)public onlyOwner{
-        require(userAddrs.length > 0,"user address length is 0");
-        require(userAddrs.length == awardRankSize,"awards not award rank size");
+        require(userAddrs.length <= awardRankSize,"awards not award rank size");
+        require(startAwardBlockNumber > 0 ,"startAwardBlockNumber is 0");
+        require(cycleAwardBlockNumber > 0 ,"cycleAwardBlockNumber is 0");
+        // console.log("%d %d %d",block.number,startAwardBlockNumber,cycleAwardBlockNumber);
+        require(block.number >= startAwardBlockNumber + (cycle +1) * cycleAwardBlockNumber,"awards block not reach");
 
+        uint256 receiveAwardValue = awardMap[cycle];
+        if(receiveAwardValue == 0 || userAddrs.length == 0){
+            awardMap[cycle] = 0;
+            cycle += 1;
+            return;
+        }
         address contractsAddress = address(this);
         uint256 balance = contractsAddress.balance;
         require(balance != 0, "address balance is 0");
-        uint256 receiveAwardValue = awardMap[cycle];
-        require(receiveAwardValue != 0, "receive award is 0");
         require(balance >= receiveAwardValue, "balance < award amount");
         
         for(uint i=0;i<userAddrs.length;i++){
@@ -85,20 +100,17 @@ contract AWARD is  Ownable   {
         return balance;
     }
 
-    function getCycleByCalc()public view virtual returns(uint256){
-        uint256 tmpAwardBlockNumber = block.number - startAwardBlockNumber;
-        require(tmpAwardBlockNumber > 0, "block.number error");
+    function getBlockNumber()public view returns(uint256){
+        return block.number;
+    }
+    
+    function getCurCycleByBlockNumber()public view returns(uint256){
+        uint256 tmpAwardBlockNumber = block.number - startAwardBlockNumber; 
+        if(tmpAwardBlockNumber < 0){
+            return 0;
+        }
         uint256 cycleNum = tmpAwardBlockNumber / cycleAwardBlockNumber;
         return cycleNum;
-    }
-
-    /**
-     * some Arbitrum contract:
-     * block.number => returns L1 block number
-     */
-    function getBlockNum()public view virtual returns(uint256){
-        require(block.number != 0, "block number err");
-        return block.number;
     }
 
     receive() external payable{
@@ -111,6 +123,7 @@ contract AWARD is  Ownable   {
                 return;
             }
             uint256 cycleNum = tmpAwardBlockNumber / cycleAwardBlockNumber;
+            // console.log("recv:%d val:%d t:%d",cycleNum,msg.value,tmpAwardBlockNumber);
             awardMap[cycleNum] += msg.value;
         }
     }
@@ -123,5 +136,4 @@ contract AWARD is  Ownable   {
         }("");
         require(success, "Transfer failed.");
     }
-
 }
