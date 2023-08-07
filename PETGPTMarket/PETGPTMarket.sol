@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
+import "Ownable.sol";
+
 interface PETGPTNFT {
     //token拥有者
     function ownerOf(uint tokenId) external view returns (address);
@@ -12,9 +14,9 @@ interface PETGPTNFT {
     function royaltyInfo(uint _tokenId, uint _salePrice) external view returns (address, uint);
 }
 
-contract PETGPTMarket {
+contract PETGPTMarket is Ownable {
     //检查token拥有者和授权
-    modifier checkOwnerOfTokenIdApproved(address petgptNFTAddress, address seller, uint tokenId){
+    modifier checkOwnerOfAndApproved(address petgptNFTAddress, address seller, uint tokenId){
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
         //token拥有者不是出售者
         require(petgptNFT.ownerOf(tokenId) == seller, 'The token owner is not the seller');
@@ -39,8 +41,6 @@ contract PETGPTMarket {
     struct Bid {
         //报价者
         address bidder;
-        //出售者
-        address seller;
         //报价
         uint price;
         //tokenId，用于查询
@@ -67,27 +67,35 @@ contract PETGPTMarket {
         for (uint i = (page - 1) * size; i < page * size; i++) {
             uint tokenId = i + 1;
             Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
-            bids[index++] = Bid(bid.bidder, bid.seller, bid.price, tokenId);
+            bids[index++] = Bid(bid.bidder, bid.price, tokenId);
         }
         return bids;
     }
 
     //交版税、转账、转移token
-    event PayableToReceiver(address receiver, uint amount);
-    event TransactionToken(address from, address to, uint tokenId, uint price, bool isBid);
+    event PayableToReceiver(address petgptNFTAddress, address receiver, uint amount);
+    event TransactionToken(address petgptNFTAddress, address from, address to, uint tokenId, uint price, bool isBid);
+
+    bool public isRoyalty;
+
+    function setIsRoyalty(bool isRoyalty_) public onlyOwner {
+        isRoyalty = isRoyalty_;
+    }
 
     function transferToken(address petgptNFTAddress, uint tokenId, uint price, address to, bool isBid) private {
         //空地址，无法转移到零地址
         require(to != address(0), 'Cannot transfer to the zero address');
-        address receiver;
         uint royaltyAmount;
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
-        //获取版税接收者和版税费用
-        (receiver, royaltyAmount) = petgptNFT.royaltyInfo(tokenId, price);
-        //交版税
-        if (royaltyAmount > 0) {
-            payable(receiver).transfer(royaltyAmount);
-            emit PayableToReceiver(receiver, royaltyAmount);
+        if (isRoyalty) {
+            address receiver;
+            //获取版税接收者和版税费用
+            (receiver, royaltyAmount) = petgptNFT.royaltyInfo(tokenId, price);
+            //交版税
+            if (royaltyAmount > 0) {
+                payable(receiver).transfer(royaltyAmount);
+                emit PayableToReceiver(petgptNFTAddress, receiver, royaltyAmount);
+            }
         }
         //向token拥有者转账
         address ownerOfToken = petgptNFT.ownerOf(tokenId);
@@ -96,31 +104,31 @@ contract PETGPTMarket {
             payable(ownerOfToken).transfer(ownerOfTokenAmount);
         //转移token
         petgptNFT.safeTransferFrom(ownerOfToken, to, tokenId);
-        emit TransactionToken(ownerOfToken, to, tokenId, price, isBid);
+        emit TransactionToken(petgptNFTAddress, ownerOfToken, to, tokenId, price, isBid);
         //下架
         if (tokenOfferedForSale[petgptNFTAddress][tokenId].price > 0)
             tokenOfferedForSale[petgptNFTAddress][tokenId] = Offer(address(0), 0, tokenId);
         if (tokenBids[petgptNFTAddress][tokenId].price > 0)
-            tokenBids[petgptNFTAddress][tokenId] = Bid(address(0), address(0), 0, tokenId);
+            tokenBids[petgptNFTAddress][tokenId] = Bid(address(0), 0, tokenId);
     }
 
     //出售，设置token价格
-    event OfferTokenForSale(uint tokenId, address offer, uint price);
+    event OfferTokenForSale(address petgptNFTAddress, uint tokenId, address offer, uint price);
 
-    function offerTokenForSale(address petgptNFTAddress, uint tokenId, uint price) public checkOwnerOfTokenIdApproved(petgptNFTAddress, msg.sender, tokenId) {
+    function offerTokenForSale(address petgptNFTAddress, uint tokenId, uint price) public checkOwnerOfAndApproved(petgptNFTAddress, msg.sender, tokenId) {
         address seller = msg.sender;
         Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
         uint bidPrice = bid.price;
-        //如果token拥有者依然是当前报价的出售者，且当前报价不为0，且售价低于等于当前报价，报错：已有相同或更高报价，可选择接受报价
-        require(seller != bid.seller || bidPrice == 0 || price > bidPrice, 'Same or higher bid already available, can choose to accept');
+        //当前报价不为0，且售价低于等于当前报价，报错：已有相同或更高报价，可选择接受报价
+        require(bidPrice == 0 || price > bidPrice, 'Same or higher bid already available, can choose to accept');
         Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
         //不能设置相同的价格
         require(seller != offer.seller || price != offer.price, 'Cannot set the same price');
         tokenOfferedForSale[petgptNFTAddress][tokenId] = Offer(seller, price, tokenId);
-        emit OfferTokenForSale(tokenId, seller, price);
+        emit OfferTokenForSale(petgptNFTAddress, tokenId, seller, price);
     }
     //购买出售中的token
-    function buyToken(address petgptNFTAddress, uint tokenId) payable public checkOwnerOfTokenIdApproved(petgptNFTAddress, tokenOfferedForSale[petgptNFTAddress][tokenId].seller, tokenId) {
+    function buyToken(address petgptNFTAddress, uint tokenId) payable public checkOwnerOfAndApproved(petgptNFTAddress, tokenOfferedForSale[petgptNFTAddress][tokenId].seller, tokenId) {
         address buyer = msg.sender;
         Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
         //你不能购买自己的token
@@ -144,7 +152,7 @@ contract PETGPTMarket {
     }
 
     //报价，向token报价
-    event EnterBidForToken(uint tokenId, address bidder, address seller, uint price);
+    event EnterBidForToken(address petgptNFTAddress, uint tokenId, address bidder, uint price);
 
     function enterBidForToken(address petgptNFTAddress, uint tokenId) payable public {
         address bidder = msg.sender;
@@ -161,25 +169,22 @@ contract PETGPTMarket {
         uint tokenOfferedForSalePrice = offer.price;
         //如果token拥有者依然是当前出售者，售价不为0且报价高于等于售价，报错：已有相同或更低售价，可选择直接购买
         require(ownerOfTokenId != offer.seller || tokenOfferedForSalePrice == 0 || price < tokenOfferedForSalePrice, 'Same or lower price already available, can choose to buy');
-        bool ownerIsNotCurrentSeller = ownerOfTokenId != bid.seller;
-        //如果token拥有者依然是当前报价的出售者，且报价者不是当前报价者或报价低于等于当前报价，报错：已有相同或更高报价
-        require(ownerIsNotCurrentSeller || bidder == currentBidder || price > currentPrice, 'Same or higher bid already available');
-        //如果token拥有者依然是当前报价的出售者，且报价者和报价与当前相同，报错：不能设置相同的报价
-        require(ownerIsNotCurrentSeller || bidder != currentBidder || price != currentPrice, 'Cannot set the same bid');
-        tokenBids[petgptNFTAddress][tokenId] = Bid(bidder, ownerOfTokenId, price, tokenId);
-        emit EnterBidForToken(tokenId, bidder, ownerOfTokenId, price);
+        //报价者不是当前报价者且报价低于等于当前报价，报错：已有相同或更高报价
+        require(bidder == currentBidder || price > currentPrice, 'Same or higher bid already available');
+        //报价者和报价与当前相同，报错：不能设置相同的报价
+        require(bidder != currentBidder || price != currentPrice, 'Cannot set the same bid');
+        tokenBids[petgptNFTAddress][tokenId] = Bid(bidder, price, tokenId);
+        emit EnterBidForToken(petgptNFTAddress, tokenId, bidder, price);
         //向当前报价者退款
         if (currentBidder != address(0) && currentPrice > 0)
             payable(currentBidder).transfer(currentPrice);
     }
     //接受报价
-    function acceptBidForToken(address petgptNFTAddress, uint tokenId, uint minPrice) public checkOwnerOfTokenIdApproved(petgptNFTAddress, msg.sender, tokenId) {
+    function acceptBidForToken(address petgptNFTAddress, uint tokenId, uint minPrice) public checkOwnerOfAndApproved(petgptNFTAddress, msg.sender, tokenId) {
         Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
         uint price = bid.price;
         //token没有报价
         require(price > 0, 'This token has not be bid');
-        //操作者虽然是token拥有者，但不是当前报价中的出售者
-        require(msg.sender == bid.seller, 'The caller is not this seller');
         //当前报价低于最低预期价格
         require(price >= minPrice, 'This current bid is lower than the minimum expectation price');
         transferToken(petgptNFTAddress, tokenId, price, bid.bidder, true);
