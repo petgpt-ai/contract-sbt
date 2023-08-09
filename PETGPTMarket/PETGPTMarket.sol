@@ -146,8 +146,6 @@ contract PETGPTMarket is Ownable {
         //下架
         if (tokenOfferedForSale[petgptNFTAddress][tokenId].price > 0)
             tokenOfferedForSale[petgptNFTAddress][tokenId] = Offer(address(0), 0);
-        if (tokenBids[petgptNFTAddress][tokenId].price > 0)
-            tokenBids[petgptNFTAddress][tokenId] = Bid(address(0), 0);
     }
 
     //出售，设置token价格
@@ -181,12 +179,6 @@ contract PETGPTMarket is Ownable {
         //多余退款
         if (value > price)
             payable(buyer).transfer(value - price);
-        //向当前报价者退款
-        Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
-        address currentBidder = bid.bidder;
-        uint currentPrice = bid.price;
-        if (currentBidder != address(0) && currentPrice > 0)
-            payable(currentBidder).transfer(currentPrice);
         transferToken(petgptNFTAddress, tokenId, price, buyer, false);
     }
 
@@ -227,5 +219,7 @@ contract PETGPTMarket is Ownable {
         //当前报价低于最低预期价格
         require(price >= minPrice, 'This current bid is lower than the minimum expectation price');
         transferToken(petgptNFTAddress, tokenId, price, bid.bidder, true);
+        if (tokenBids[petgptNFTAddress][tokenId].price > 0)
+            tokenBids[petgptNFTAddress][tokenId] = Bid(address(0), 0);
     }
 }
