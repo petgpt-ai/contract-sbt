@@ -15,7 +15,7 @@ contract Cat is Ownable,ERC721Enumerable, IERC5192 {
     bool private isLocked;
     CatScientist private catScientist;
 
-    uint256 public price = 0.05 ether;
+    uint256 public price = 0.03 ether;
     uint256 public commission = 30;
     uint256 public bonus = 20;
     address public bonusAddress;
