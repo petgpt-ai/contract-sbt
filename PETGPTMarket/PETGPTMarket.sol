@@ -50,11 +50,13 @@ contract PETGPTMarket is Ownable {
         return offerBid;
     }
 
-    function getOfferBids(address petgptNFTAddress, uint page, uint size) public view returns (OfferBid[] memory)  {
-        OfferBid[] memory offerBids = new OfferBid[](size);
+    function getOfferBids(address petgptNFTAddress, uint start, uint end) public view returns (OfferBid[] memory)  {
+        require(start != 0 && end != 0 && end >= start);
+        uint end1 = end + 1;
+        OfferBid[] memory offerBids = new OfferBid[](end1 - start);
         uint index;
-        for (uint i = (page - 1) * size; i < page * size; i++) {
-            uint tokenId = i + 1;
+        for (uint i = start; i < end1; i++) {
+            uint tokenId = i;
             Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
             Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
             offerBids[index++] = OfferBid(tokenId, PETGPTNFT(petgptNFTAddress).ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
