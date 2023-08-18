@@ -13,7 +13,7 @@ interface PETGPTNFT {
 }
 
 contract PETGPTMarket is Ownable {
-    
+
     modifier checkOwnerOfAndApproved(address petgptNFTAddress, address seller, uint tokenId){
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
         require(petgptNFT.ownerOf(tokenId) == seller, 'The token owner is not the seller');
@@ -55,8 +55,7 @@ contract PETGPTMarket is Ownable {
         uint end1 = end + 1;
         OfferBid[] memory offerBids = new OfferBid[](end1 - start);
         uint index;
-        for (uint i = start; i < end1; i++) {
-            uint tokenId = i;
+        for (uint tokenId = start; tokenId < end1; tokenId++) {
             Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
             Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
             offerBids[index++] = OfferBid(tokenId, PETGPTNFT(petgptNFTAddress).ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
@@ -64,13 +63,13 @@ contract PETGPTMarket is Ownable {
         return offerBids;
     }
 
-    function getOwnerOf(address petgptNFTAddress, uint page, uint size) public view returns (address[] memory)  {
-        address[] memory owners = new address[](size);
+    function getOwnerOf(address petgptNFTAddress, uint start, uint end) public view returns (address[] memory)  {
+        require(start != 0 && end != 0 && end >= start);
+        uint end1 = end + 1;
+        address[] memory owners = new address[](end1 - start);
         uint index;
-        PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
-        for (uint i = (page - 1) * size; i < page * size; i++) {
-            uint tokenId = i + 1;
-            owners[index++] = petgptNFT.ownerOf(tokenId);
+        for (uint tokenId = start; tokenId < end1; tokenId++) {
+            owners[index++] = PETGPTNFT(petgptNFTAddress).ownerOf(tokenId);
         }
         return owners;
     }
