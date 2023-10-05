@@ -2,9 +2,9 @@
 pragma solidity ^0.8.18;
 
 import "./Ownable.sol";
-import "./Proxy.sol";
 
 interface PETGPTNFT {
+
     function totalSupply() external view returns (uint);
 
     function ownerOf(uint tokenId) external view returns (address);
@@ -16,18 +16,15 @@ interface PETGPTNFT {
     function royaltyInfo(uint _tokenId, uint _salePrice) external view returns (address, uint);
 }
 
-contract PETGPTMarket is Ownable, Proxy {
-    address public implementation; // 逻辑合约地址
-    event Upgraded(address indexed implementation);
-    // 构造函数，初始化admin和逻辑合约地址
-    constructor(address i){
-        implementation = i;
-    }
-    function _implementation() internal view virtual override returns (address) {
-        return implementation;
+contract PETGPTMarket is Ownable {
+    modifier checkOwnerOfAndApproved(address petgptNFTAddress, address seller, uint tokenId){
+        PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
+        require(petgptNFT.ownerOf(tokenId) == seller, 'The token owner is not the seller');
+        require(petgptNFT.isApprovedForAll(seller, address(this)), 'Not yet approved');
+        _;
     }
 
-    receive() external payable {}
+    mapping(address => mapping(uint => uint)) public tokenType;
 
     struct Offer {
         address seller;
@@ -50,22 +47,13 @@ contract PETGPTMarket is Ownable, Proxy {
         uint offerPrice;
         address bidder;
         uint bidPrice;
+        uint typeId;
     }
-
-    mapping(address => bool) public petgptNFTAddressAccept;
-    mapping(address => bool) public isRoyalty;
-
-    event PayableToReceiver(address petgptNFTAddress, address receiver, uint amount);
-    event TransactionToken(address petgptNFTAddress, address from, address to, uint tokenId, uint price, bool isBid);
-    event OfferTokenForSale(address petgptNFTAddress, uint tokenId, address offer, uint price);
-    event EnterBidForToken(address petgptNFTAddress, uint tokenId, address bidder, uint price);
-    event SetAccept(address petgptNFTAddress, bool accept);
-    event SetIsRoyalty(address petgptNFTAddress, bool isRoyalty);
 
     function getOfferBid(address petgptNFTAddress, uint tokenId) public view returns (OfferBid memory offerBid)  {
         Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
         Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
-        offerBid = OfferBid(tokenId, PETGPTNFT(petgptNFTAddress).ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
+        offerBid = OfferBid(tokenId, PETGPTNFT(petgptNFTAddress).ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price, tokenType[petgptNFTAddress][tokenId]);
         return offerBid;
     }
 
@@ -77,7 +65,7 @@ contract PETGPTMarket is Ownable, Proxy {
         for (uint tokenId = start; tokenId < end1; tokenId++) {
             Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
             Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
-            offerBids[index++] = OfferBid(tokenId, PETGPTNFT(petgptNFTAddress).ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
+            offerBids[index++] = OfferBid(tokenId, PETGPTNFT(petgptNFTAddress).ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price, tokenType[petgptNFTAddress][tokenId]);
         }
         return offerBids;
     }
@@ -91,5 +79,132 @@ contract PETGPTMarket is Ownable, Proxy {
             owners[index++] = PETGPTNFT(petgptNFTAddress).ownerOf(tokenId);
         }
         return owners;
+    }
+
+    mapping(address => bool) public NFTAddressIsAccept;
+
+    event SetIsAccept(address petgptNFTAddress, bool isAccept);
+
+    function setIsAccept(address petgptNFTAddress, bool isAccept) public onlyOwner {
+        NFTAddressIsAccept[petgptNFTAddress] = isAccept;
+        emit SetIsAccept(petgptNFTAddress, isAccept);
+    }
+    modifier checkIsAccept(address petgptNFTAddress){
+        require(NFTAddressIsAccept[petgptNFTAddress], 'This address is not allowed to use this contract');
+        _;
+    }
+
+    mapping(address => bool) public NFTAddressIsRoyalty;
+
+    event SetIsRoyalty(address petgptNFTAddress, bool isRoyalty);
+
+    function setIsRoyalty(address petgptNFTAddress, bool isRoyalty) public onlyOwner checkIsAccept(petgptNFTAddress) {
+        NFTAddressIsRoyalty[petgptNFTAddress] = isRoyalty;
+        emit SetIsRoyalty(petgptNFTAddress, isRoyalty);
+    }
+
+    event PayableToReceiver(address petgptNFTAddress, address receiver, uint amount);
+    event TransactionToken(address petgptNFTAddress, address from, address to, uint tokenId, uint price, uint typeId, bool isBid);
+
+    function transferTokenEvent(address petgptNFTAddress, address ownerOfToken, address to, uint tokenId, uint price, bool isBid) private {
+        emit TransactionToken(petgptNFTAddress, ownerOfToken, to, tokenId, price, tokenType[petgptNFTAddress][tokenId], isBid);
+
+    }
+
+    function transferToken(address petgptNFTAddress, uint tokenId, uint price, address to, bool isBid) private {
+        require(to != address(0), 'Cannot transfer to the zero address');
+        uint royaltyAmount;
+        PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
+        if (NFTAddressIsRoyalty[petgptNFTAddress]) {
+            address receiver;
+            (receiver, royaltyAmount) = petgptNFT.royaltyInfo(tokenId, price);
+            if (royaltyAmount > 0) {
+                payable(receiver).transfer(royaltyAmount);
+                emit PayableToReceiver(petgptNFTAddress, receiver, royaltyAmount);
+            }
+        }
+        address ownerOfToken = petgptNFT.ownerOf(tokenId);
+        uint ownerOfTokenAmount = price - royaltyAmount;
+        if (ownerOfTokenAmount > 0)
+            payable(ownerOfToken).transfer(ownerOfTokenAmount);
+        petgptNFT.safeTransferFrom(ownerOfToken, to, tokenId);
+        transferTokenEvent(petgptNFTAddress, ownerOfToken, to, tokenId, price, isBid);
+        if (tokenOfferedForSale[petgptNFTAddress][tokenId].price > 0)
+            tokenOfferedForSale[petgptNFTAddress][tokenId] = Offer(address(0), 0);
+    }
+
+    event OfferTokenForSale(address petgptNFTAddress, uint tokenId, address offer, uint price, uint typeId);
+
+    function updateTokenOfferedForSale(address petgptNFTAddress, uint tokenId, address seller, uint price, uint typeId) private {
+        tokenOfferedForSale[petgptNFTAddress][tokenId] = Offer(seller, price);
+        tokenType[petgptNFTAddress][tokenId] = typeId;
+    }
+
+    function offerTokenForSale(address petgptNFTAddress, uint tokenId, uint price, uint typeId) public checkIsAccept(petgptNFTAddress) checkOwnerOfAndApproved(petgptNFTAddress, msg.sender, tokenId) {
+        address seller = msg.sender;
+        Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
+        uint bidPrice = bid.price;
+        bool priceEQ0 = price == 0;
+        require(priceEQ0 || bidPrice == 0 || price > bidPrice, 'Same or higher bid already available, can choose to accept');
+        Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
+        require(priceEQ0 || seller != offer.seller || price != offer.price, 'Cannot set the same price');
+        updateTokenOfferedForSale(petgptNFTAddress, tokenId, seller, price, typeId);
+        emit OfferTokenForSale(petgptNFTAddress, tokenId, seller, price, typeId);
+    }
+
+    function buyToken(address petgptNFTAddress, uint tokenId) payable public checkIsAccept(petgptNFTAddress) checkOwnerOfAndApproved(petgptNFTAddress, tokenOfferedForSale[petgptNFTAddress][tokenId].seller, tokenId) {
+        address buyer = msg.sender;
+        Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
+        require(buyer != offer.seller, 'You can not buy your own token');
+        uint price = offer.price;
+        require(price > 0, 'This token is not on sale');
+        uint value = msg.value;
+        require(value >= price, 'Insufficient payment amount');
+        if (value > price)
+            payable(buyer).transfer(value - price);
+        transferToken(petgptNFTAddress, tokenId, price, buyer, false);
+    }
+
+    event EnterBidForToken(address petgptNFTAddress, uint tokenId, address bidder, uint price, uint typeId);
+
+    mapping(address => bool) public NFTAddressIsBid;
+
+    event SetIsBid(address petgptNFTAddress, bool isBid);
+
+    function setIsBid(address petgptNFTAddress, bool isBid) public onlyOwner checkIsAccept(petgptNFTAddress) {
+        NFTAddressIsBid[petgptNFTAddress] = isBid;
+        emit SetIsBid(petgptNFTAddress, isBid);
+    }
+
+    function enterBidForToken(address petgptNFTAddress, uint tokenId, uint typeId) payable public checkIsAccept(petgptNFTAddress) {
+        uint price = msg.value;
+        require(NFTAddressIsBid[petgptNFTAddress] || price == 0, 'This address does not allow bid');
+        address bidder = msg.sender;
+        Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
+        address currentBidder = bid.bidder;
+        uint currentPrice = bid.price;
+        PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
+        address ownerOfTokenId = petgptNFT.ownerOf(tokenId);
+        require(bidder != ownerOfTokenId, 'You can not buy your own token');
+        Offer storage offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
+        uint tokenOfferedForSalePrice = offer.price;
+        require(ownerOfTokenId != offer.seller || tokenOfferedForSalePrice == 0 || price < tokenOfferedForSalePrice, 'Same or lower price already available, can choose to buy');
+        require(bidder == currentBidder || price > currentPrice, 'Same or higher bid already available');
+        require(bidder != currentBidder || price != currentPrice, 'Cannot set the same bid');
+        tokenBids[petgptNFTAddress][tokenId] = Bid(bidder, price);
+        tokenType[petgptNFTAddress][tokenId] = typeId;
+        emit EnterBidForToken(petgptNFTAddress, tokenId, bidder, price, typeId);
+        if (currentBidder != address(0) && currentPrice > 0)
+            payable(currentBidder).transfer(currentPrice);
+    }
+
+    function acceptBidForToken(address petgptNFTAddress, uint tokenId, uint minPrice) public checkIsAccept(petgptNFTAddress) checkOwnerOfAndApproved(petgptNFTAddress, msg.sender, tokenId) {
+        Bid storage bid = tokenBids[petgptNFTAddress][tokenId];
+        uint price = bid.price;
+        require(price > 0, 'This token has not be bid');
+        require(price >= minPrice, 'This current bid is lower than the minimum expectation price');
+        transferToken(petgptNFTAddress, tokenId, price, bid.bidder, true);
+        if (tokenBids[petgptNFTAddress][tokenId].price > 0)
+            tokenBids[petgptNFTAddress][tokenId] = Bid(address(0), 0);
     }
 }
