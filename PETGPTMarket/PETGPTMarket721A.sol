@@ -3,6 +3,17 @@ pragma solidity ^0.8.18;
 
 import "./Ownable.sol";
 
+    struct TokenOwnership {
+        // The address of the owner.
+        address addr;
+        // Stores the start time of ownership with minimal overhead for tokenomics.
+        uint64 startTimestamp;
+        // Whether the token has been burned.
+        bool burned;
+        // Arbitrary data similar to `startTimestamp` that can be set via {_extraData}.
+        uint24 extraData;
+    }
+
 interface PETGPTNFT {
 
     function totalSupply() external view returns (uint);
@@ -15,7 +26,7 @@ interface PETGPTNFT {
 
     function royaltyInfo(uint _tokenId, uint _salePrice) external view returns (address, uint);
 
-    function tokenByIndex(uint index) external view returns (uint);
+    function explicitOwnershipOf(uint256 tokenId) external view returns (TokenOwnership memory);
 }
 
 contract PETGPTMarket is Ownable {
@@ -61,8 +72,10 @@ contract PETGPTMarket is Ownable {
         offerBids = new OfferBid[](end1 - start);
         uint index;
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
-        for (uint i = start; i < end1; i++) {
-            uint tokenId = petgptNFT.tokenByIndex(i - 1);
+        for (uint tokenId = start; tokenId < end1; tokenId++) {
+            if (petgptNFT.explicitOwnershipOf(tokenId).burned) {
+                continue;
+            }
             Offer memory offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
             Bid memory bid = tokenBids[petgptNFTAddress][tokenId];
             offerBids[index++] = OfferBid(tokenId, petgptNFT.ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
@@ -76,19 +89,13 @@ contract PETGPTMarket is Ownable {
         owners = new address[](end1 - start);
         uint index;
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
-        for (uint i = start; i < end1; i++) {
-            owners[index++] = petgptNFT.ownerOf(petgptNFT.tokenByIndex(i - 1));
+        for (uint tokenId = start; tokenId < end1; tokenId++) {
+            if (petgptNFT.explicitOwnershipOf(tokenId).burned) {
+                continue;
+            }
+            owners[index++] = petgptNFT.ownerOf(tokenId);
         }
         return owners;
-    }
-
-
-    function tokenIsOffer(address petgptNFTAddress, uint tokenId) public view returns (bool isOffer)  {
-        Offer memory offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
-        if (PETGPTNFT(petgptNFTAddress).ownerOf(tokenId) == offer.seller && offer.price > 0) {
-            isOffer = true;
-        }
-        return isOffer;
     }
 
     mapping(address => bool) public NFTAddressIsAccept;
