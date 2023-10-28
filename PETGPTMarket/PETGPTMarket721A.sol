@@ -15,9 +15,6 @@ import "./Ownable.sol";
     }
 
 interface PETGPTNFT {
-
-    function totalSupply() external view returns (uint);
-
     function ownerOf(uint tokenId) external view returns (address);
 
     function safeTransferFrom(address from, address to, uint tokenId) external payable;
@@ -29,7 +26,7 @@ interface PETGPTNFT {
     function explicitOwnershipOf(uint256 tokenId) external view returns (TokenOwnership memory);
 }
 
-contract PETGPTMarket is Ownable {
+contract PETGPTMarket721A is Ownable {
     modifier checkOwnerOfAndApproved(address petgptNFTAddress, address seller, uint tokenId){
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
         require(petgptNFT.ownerOf(tokenId) == seller, 'The token owner is not the seller');
@@ -66,34 +63,48 @@ contract PETGPTMarket is Ownable {
         return OfferBid(tokenId, PETGPTNFT(petgptNFTAddress).ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
     }
 
-    function getOfferBids(address petgptNFTAddress, uint start, uint end) public view returns (OfferBid[] memory offerBids)  {
+    modifier checkStartEnd(uint start, uint end){
         require(start != 0 && end != 0 && end >= start);
+        _;
+    }
+    function getOfferBids(address petgptNFTAddress, uint start, uint end) public view checkStartEnd(start, end) returns (OfferBid[] memory offerBids)  {
         uint end1 = end + 1;
         offerBids = new OfferBid[](end1 - start);
         uint index;
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
         for (uint tokenId = start; tokenId < end1; tokenId++) {
-            if (petgptNFT.explicitOwnershipOf(tokenId).burned) {
-                continue;
-            }
             Offer memory offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
             Bid memory bid = tokenBids[petgptNFTAddress][tokenId];
-            offerBids[index++] = OfferBid(tokenId, petgptNFT.ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
+            offerBids[index++] = OfferBid(tokenId, petgptNFT.explicitOwnershipOf(tokenId).burned ? address(0) : petgptNFT.ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
         }
         return offerBids;
     }
 
-    function getOwnerOf(address petgptNFTAddress, uint start, uint end) public view returns (address[] memory owners)  {
-        require(start != 0 && end != 0 && end >= start);
+    mapping(address => mapping(address => mapping(uint => uint))) private userBidsIndex;
+    mapping(address => mapping(address => OfferBid[])) private userBids;
+
+    function getUserBids(address petgptNFTAddress, address user, uint start, uint end) public view checkStartEnd(start, end) returns (OfferBid[] memory offerBids)  {
+        start = start - 1;
+        uint userBidsLength = userBids[petgptNFTAddress][user].length;
+        if (start < userBidsLength) {
+            end = end - 1;
+            uint end1 = end < userBidsLength ? (end + 1) : userBidsLength;
+            offerBids = new OfferBid[](end1 - start);
+            uint index;
+            for (uint i = start; i < end1; i++) {
+                offerBids[index++] = userBids[petgptNFTAddress][user][i];
+            }
+        }
+        return offerBids;
+    }
+
+    function getOwnerOf(address petgptNFTAddress, uint start, uint end) public view checkStartEnd(start, end) returns (address[] memory owners)  {
         uint end1 = end + 1;
         owners = new address[](end1 - start);
         uint index;
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
         for (uint tokenId = start; tokenId < end1; tokenId++) {
-            if (petgptNFT.explicitOwnershipOf(tokenId).burned) {
-                continue;
-            }
-            owners[index++] = petgptNFT.ownerOf(tokenId);
+            owners[index++] = petgptNFT.explicitOwnershipOf(tokenId).burned ? address(0) : petgptNFT.ownerOf(tokenId);
         }
         return owners;
     }
@@ -185,22 +196,62 @@ contract PETGPTMarket is Ownable {
         emit SetIsBid(petgptNFTAddress, isBid);
     }
 
+    function removeUserBids(address petgptNFTAddress, uint tokenId, address bidder) private {
+        uint userBidsLength = userBids[petgptNFTAddress][bidder].length;
+        uint tokenIndex = userBidsIndex[petgptNFTAddress][bidder][tokenId];
+        bool tokenIndexHas = tokenIndex + 1 <= userBidsLength;
+        if (tokenIndexHas) {
+            OfferBid memory lastOfferBid = userBids[petgptNFTAddress][bidder][userBidsLength - 1];
+            userBids[petgptNFTAddress][bidder][tokenIndex] = lastOfferBid;
+            userBidsIndex[petgptNFTAddress][bidder][lastOfferBid.tokenId] = tokenIndex;
+            delete userBidsIndex[petgptNFTAddress][bidder][tokenId];
+            userBids[petgptNFTAddress][bidder].pop();
+        }
+    }
+
+    function setUserBids(address petgptNFTAddress, uint tokenId, address userBidsOwner, address offerSeller, uint tokenOfferedForSalePrice, address currentBidder) private {
+        address bidder = msg.sender;
+        uint price = msg.value;
+        uint userBidsLength = userBids[petgptNFTAddress][bidder].length;
+        uint tokenIndex = userBidsIndex[petgptNFTAddress][bidder][tokenId];
+        bool isCurrentBidderHandle = (bidder == currentBidder) && (tokenIndex + 1 <= userBidsLength);
+        if (isCurrentBidderHandle && price == 0) {
+            removeUserBids(petgptNFTAddress, tokenId, bidder);
+        } else {
+            OfferBid memory userBidsOfferBid = OfferBid(tokenId, userBidsOwner, offerSeller, tokenOfferedForSalePrice, bidder, price);
+            if (isCurrentBidderHandle) {
+                userBids[petgptNFTAddress][bidder][tokenIndex] = userBidsOfferBid;
+            } else {
+                removeUserBids(petgptNFTAddress, tokenId, currentBidder);
+                userBidsIndex[petgptNFTAddress][bidder][tokenId] = userBidsLength;
+                userBids[petgptNFTAddress][bidder].push(userBidsOfferBid);
+            }
+        }
+    }
+
     function enterBidForToken(address petgptNFTAddress, uint tokenId) payable public {
         uint price = msg.value;
-        require(price == 0 || NFTAddressIsBid[petgptNFTAddress], 'This address does not allow bid');
+        bool priceIsZero = price == 0;
+        require(priceIsZero || NFTAddressIsBid[petgptNFTAddress], 'This address does not allow bid');
         address bidder = msg.sender;
         Bid memory bid = tokenBids[petgptNFTAddress][tokenId];
         address currentBidder = bid.bidder;
         uint currentPrice = bid.price;
-        PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
-        address ownerOfTokenId = petgptNFT.ownerOf(tokenId);
-        require(bidder != ownerOfTokenId, 'You can not buy your own token');
+        bool isCurrentBidder = bidder == currentBidder;
         Offer memory offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
         uint tokenOfferedForSalePrice = offer.price;
-        require(ownerOfTokenId != offer.seller || tokenOfferedForSalePrice == 0 || price < tokenOfferedForSalePrice, 'Same or lower price already available, can choose to buy');
-        require(bidder == currentBidder || price > currentPrice, 'Same or higher bid already available');
-        require(bidder != currentBidder || price != currentPrice, 'Cannot set the same bid');
+        address offerSeller = offer.seller;
+        address userBidsOwner = offerSeller;
+        if (!(priceIsZero && isCurrentBidder)) {
+            address ownerOfTokenId = PETGPTNFT(petgptNFTAddress).ownerOf(tokenId);
+            require(bidder != ownerOfTokenId, 'You can not buy your own token');
+            require(ownerOfTokenId != offerSeller || tokenOfferedForSalePrice == 0 || price < tokenOfferedForSalePrice, 'Same or lower price already available, can choose to buy');
+            userBidsOwner = ownerOfTokenId;
+        }
+        require(isCurrentBidder || price > currentPrice, 'Same or higher bid already available');
+        require(!isCurrentBidder || price != currentPrice, 'Cannot set the same bid');
         tokenBids[petgptNFTAddress][tokenId] = Bid(bidder, price);
+        setUserBids(petgptNFTAddress, tokenId, userBidsOwner, offerSeller, tokenOfferedForSalePrice, currentBidder);
         emit EnterBidForToken(petgptNFTAddress, tokenId, bidder, price);
         if (currentBidder != address(0) && currentPrice > 0)
             payable(currentBidder).transfer(currentPrice);
@@ -212,8 +263,9 @@ contract PETGPTMarket is Ownable {
         uint price = bid.price;
         require(price > 0, 'This token has not be bid');
         require(price >= minPrice, 'This current bid is lower than the minimum expectation price');
-        transferToken(petgptNFTAddress, tokenId, price, bid.bidder, true);
-        if (tokenBids[petgptNFTAddress][tokenId].price > 0)
-            tokenBids[petgptNFTAddress][tokenId] = Bid(address(0), 0);
+        address bidder = bid.bidder;
+        transferToken(petgptNFTAddress, tokenId, price, bidder, true);
+        tokenBids[petgptNFTAddress][tokenId] = Bid(address(0), 0);
+        removeUserBids(petgptNFTAddress, tokenId, bidder);
     }
 }
