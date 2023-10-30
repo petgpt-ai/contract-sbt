@@ -75,7 +75,9 @@ contract PETGPTMarket721A is Ownable {
         for (uint tokenId = start; tokenId < end1; tokenId++) {
             Offer memory offer = tokenOfferedForSale[petgptNFTAddress][tokenId];
             Bid memory bid = tokenBids[petgptNFTAddress][tokenId];
-            offerBids[index++] = OfferBid(tokenId, petgptNFT.explicitOwnershipOf(tokenId).burned ? address(0) : petgptNFT.ownerOf(tokenId), offer.seller, offer.price, bid.bidder, bid.price);
+            TokenOwnership memory tokenOwnership = petgptNFT.explicitOwnershipOf(tokenId);
+            address addr = tokenOwnership.addr;
+            offerBids[index++] = OfferBid(tokenId, (addr == address(0) || tokenOwnership.burned) ? address(0) : addr, offer.seller, offer.price, bid.bidder, bid.price);
         }
         return offerBids;
     }
@@ -104,7 +106,9 @@ contract PETGPTMarket721A is Ownable {
         uint index;
         PETGPTNFT petgptNFT = PETGPTNFT(petgptNFTAddress);
         for (uint tokenId = start; tokenId < end1; tokenId++) {
-            owners[index++] = petgptNFT.explicitOwnershipOf(tokenId).burned ? address(0) : petgptNFT.ownerOf(tokenId);
+            TokenOwnership memory tokenOwnership = petgptNFT.explicitOwnershipOf(tokenId);
+            address addr = tokenOwnership.addr;
+            owners[index++] = (addr == address(0) || tokenOwnership.burned) ? address(0) : addr;
         }
         return owners;
     }
