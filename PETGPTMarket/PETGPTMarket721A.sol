@@ -216,9 +216,8 @@ contract PETGPTMarket721A is Ownable {
     function setUserBids(address petgptNFTAddress, uint tokenId, address userBidsOwner, address offerSeller, uint tokenOfferedForSalePrice, address currentBidder) private {
         address bidder = msg.sender;
         uint price = msg.value;
-        uint userBidsLength = userBids[petgptNFTAddress][bidder].length;
         uint tokenIndex = userBidsIndex[petgptNFTAddress][bidder][tokenId];
-        bool isCurrentBidderHandle = (bidder == currentBidder) && (tokenIndex + 1 <= userBidsLength);
+        bool isCurrentBidderHandle = (bidder == currentBidder) && (tokenIndex + 1 <= userBids[petgptNFTAddress][bidder].length);
         if (isCurrentBidderHandle && price == 0) {
             removeUserBids(petgptNFTAddress, tokenId, bidder);
         } else {
@@ -227,7 +226,7 @@ contract PETGPTMarket721A is Ownable {
                 userBids[petgptNFTAddress][bidder][tokenIndex] = userBidsOfferBid;
             } else {
                 removeUserBids(petgptNFTAddress, tokenId, currentBidder);
-                userBidsIndex[petgptNFTAddress][bidder][tokenId] = userBidsLength;
+                userBidsIndex[petgptNFTAddress][bidder][tokenId] = userBids[petgptNFTAddress][bidder].length;
                 userBids[petgptNFTAddress][bidder].push(userBidsOfferBid);
             }
         }
